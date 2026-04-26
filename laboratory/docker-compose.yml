@@ -1,0 +1,512 @@
+name: bigdata-laboratory
+
+# =========================
+# Accesos Rapidos (localhost)
+# =========================
+# NameNode HDFS UI: http://localhost:9870
+# YARN ResourceManager: http://localhost:8088
+# Spark Master UI: http://localhost:18080
+# Spark Worker UI: http://localhost:8082
+# Flink UI (JobManager): http://localhost:8081
+# Prometheus UI: http://localhost:9091
+# Grafana UI: http://localhost:3000
+# Ganglia UI: http://localhost:8085
+# pgAdmin UI: http://localhost:5050
+#
+# SQL/Brokers (conexion):
+# MySQL: localhost:3306
+# PostgreSQL: localhost:5432
+# MongoDB: localhost:27017
+# Cassandra: localhost:9042
+# Redis: localhost:6379
+# Kafka: localhost:9092
+# ZooKeeper: localhost:2181
+#
+# Limites de recursos: cada servicio tiene tope de CPU/RAM para evitar saturar el host.
+
+services:
+  # =========================
+  # SQL / Relational
+  # =========================
+  # Motor relacional principal para ejercicios de ingestión y Sqoop.
+  mysql:
+    image: mysql:8.4
+    container_name: mysql
+    profiles: ["sql-ingesta"]
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: "1g"
+    mem_reservation: "512m"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: appdb
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    networks: [bigdata-net]
+
+  # PostgreSQL para prácticas SQL y metastore de Hive en el perfil legacy.
+  postgres:
+    image: postgres:18
+    container_name: postgres
+    profiles: ["sql-ingesta"]
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: "1g"
+    mem_reservation: "512m"
+    environment:
+      POSTGRES_DB: appdb
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks: [bigdata-net]
+
+  # Interfaz web para administrar PostgreSQL de forma visual.
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: pgadmin
+    profiles: ["sql-ingesta"]
+    restart: unless-stopped
+    cpus: "0.5"
+    mem_limit: "512m"
+    mem_reservation: "256m"
+    depends_on:
+      - postgres
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.test
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    volumes:
+      - ./data/pgadmin:/var/lib/pgadmin
+    networks: [bigdata-net]
+
+  # =========================
+  # NoSQL
+  # =========================
+  # Base de datos documental (JSON/BSON) para prácticas NoSQL.
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    profiles: ["nosql"]
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: "1g"
+    mem_reservation: "512m"
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data/mongodb:/data/db
+    networks: [bigdata-net]
+
+  # Base de datos NoSQL orientada a columnas para cargas distribuidas.
+  cassandra:
+    image: cassandra:4.1
+    container_name: cassandra
+    profiles: ["nosql"]
+    restart: unless-stopped
+    cpus: "1.5"
+    mem_limit: "2g"
+    mem_reservation: "1g"
+    ports:
+      - "9042:9042"
+    volumes:
+      - ./data/cassandra:/var/lib/cassandra
+    networks: [bigdata-net]
+
+  # Almacén clave-valor en memoria para caching y colas ligeras.
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    profiles: ["nosql"]
+    restart: unless-stopped
+    cpus: "0.5"
+    mem_limit: "512m"
+    mem_reservation: "256m"
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    networks: [bigdata-net]
+
+  # Broker MQTT para mensajería IoT y escenarios de streaming sencillo.
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    profiles: ["nosql", "streaming"]
+    restart: unless-stopped
+    cpus: "0.5"
+    mem_limit: "256m"
+    mem_reservation: "128m"
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./data/mosquitto:/mosquitto/data
+      - ./logs/mosquitto:/mosquitto/log
+    networks: [bigdata-net]
+
+  # =========================
+  # Streaming
+  # =========================
+
+  # Broker de eventos para pipelines de datos en tiempo real (modo KRaft, sin ZooKeeper).
+  kafka:
+    image: apache/kafka:latest
+    container_name: kafka
+    profiles: ["streaming"]
+    restart: unless-stopped
+    cpus: "1.5"
+    mem_limit: "2g"
+    mem_reservation: "1g"
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    ports:
+      - "9092:9092"
+    volumes:
+      - ./data/kafka:/var/lib/kafka/data
+    networks: [bigdata-net]
+
+  # Nodo maestro de Flink (UI y coordinación de jobs).
+  flink-jobmanager:
+    image: flink:1.19-java17
+    container_name: flink-jobmanager
+    profiles: ["streaming"]
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: "1g"
+    mem_reservation: "512m"
+    command: jobmanager
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+    ports:
+      - "8081:8081"
+    networks: [bigdata-net]
+
+  # Nodo worker de Flink que ejecuta tareas de procesamiento.
+  flink-taskmanager:
+    image: flink:1.19-java17
+    container_name: flink-taskmanager
+    profiles: ["streaming"]
+    restart: unless-stopped
+    cpus: "1.5"
+    mem_limit: "2g"
+    mem_reservation: "1g"
+    depends_on:
+      - flink-jobmanager
+    command: taskmanager
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 2
+    networks: [bigdata-net]
+
+  # =========================
+  # Spark
+  # =========================
+  # Master de Spark para coordinar ejecución distribuida.
+  spark-master:
+    image: apache/spark:latest
+    container_name: spark-master
+    profiles: ["core"]
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: "1g"
+    mem_reservation: "512m"
+    command: ["/opt/spark/sbin/start-master.sh"]
+    environment:
+      SPARK_MASTER_HOST: spark-master
+      SPARK_NO_DAEMONIZE: "true"
+    ports:
+      - "7077:7077"
+      - "18080:8080"
+    networks: [bigdata-net]
+
+  # Worker de Spark conectado al master para ejecutar jobs.
+  spark-worker:
+    image: apache/spark:latest
+    container_name: spark-worker
+    profiles: ["core"]
+    restart: unless-stopped
+    cpus: "2.0"
+    mem_limit: "3g"
+    mem_reservation: "2g"
+    depends_on:
+      - spark-master
+    command: ["/opt/spark/sbin/start-worker.sh", "spark://spark-master:7077"]
+    environment:
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: "2"
+      SPARK_NO_DAEMONIZE: "true"
+    ports:
+      - "8082:8081"
+    networks: [bigdata-net]
+
+  # =========================
+  # Hadoop + Hive + HBase + Sqoop + Pig + Oozie + Ganglia (legacy profile)
+  # Basado en imágenes community del ecosistema bde2020.
+  # =========================
+  # NameNode de HDFS: gestiona metadatos del sistema de archivos.
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    profiles: ["legacy"]
+    restart: unless-stopped
+    cpus: "1.5"
+    mem_limit: "2g"
+    mem_reservation: "1g"
+    environment:
+      CLUSTER_NAME: bigdata-lab
+      CORE_CONF_fs_defaultFS: hdfs://namenode:8020
+    ports:
+      - "9870:9870"
+      - "8020:8020"
+    volumes:
+      - ./data/hadoop/namenode:/hadoop/dfs/name
+    networks: [bigdata-net]
+
+  # DataNode 1 de HDFS: almacena bloques de datos replicados.
+  datanode1:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode1
+    profiles: ["legacy"]
+    restart: unless-stopped
+    cpus: "1.5"
+    mem_limit: "2g"
+    mem_reservation: "1g"
+    depends_on:
+      - namenode
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:8020
+      SERVICE_PRECONDITION: namenode:9870
+    ports:
+      - "9864:9864"
+    volumes:
+      - ./data/hadoop/datanode1:/hadoop/dfs/data
+    networks: [bigdata-net]
+
+  # DataNode 2 de HDFS: segunda réplica para tolerancia a fallos.
+  datanode2:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode2
+    profiles: ["legacy"]
+    restart: unless-stopped
+    cpus: "1.5"
+    mem_limit: "2g"
+    mem_reservation: "1g"
+    depends_on:
+      - namenode
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:8020
+      SERVICE_PRECONDITION: namenode:9870
+    ports:
+      - "9865:9864"
+    volumes:
+      - ./data/hadoop/datanode2:/hadoop/dfs/data
+    networks: [bigdata-net]
+
+  # ResourceManager de YARN: planifica y asigna recursos del clúster.
+  resourcemanager:
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+    container_name: resourcemanager
+    profiles: ["legacy"]
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: "1g"
+    mem_reservation: "512m"
+    depends_on:
+      - namenode
+      - datanode1
+      - datanode2
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:8020
+      SERVICE_PRECONDITION: namenode:9870 datanode1:9864 datanode2:9864
+    ports:
+      - "8088:8088"
+    networks: [bigdata-net]
+
+  # NodeManager de YARN: ejecuta contenedores en los nodos de trabajo.
+  nodemanager:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: nodemanager
+    profiles: ["legacy"]
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: "1536m"
+    mem_reservation: "768m"
+    depends_on:
+      - resourcemanager
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:8020
+      SERVICE_PRECONDITION: resourcemanager:8088
+    ports:
+      - "8042:8042"
+    networks: [bigdata-net]
+
+  # HistoryServer de MapReduce: historial y trazas de jobs finalizados.
+  historyserver:
+    image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
+    container_name: historyserver
+    profiles: ["legacy"]
+    restart: unless-stopped
+    cpus: "0.75"
+    mem_limit: "768m"
+    mem_reservation: "384m"
+    depends_on:
+      - namenode
+      - resourcemanager
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:8020
+      SERVICE_PRECONDITION: namenode:9870 resourcemanager:8088
+    ports:
+      - "8188:8188"
+    networks: [bigdata-net]
+
+  # HiveServer2 para consultas SQL sobre datos en Hadoop/HDFS.
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-server
+    profiles: ["legacy"]
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: "1536m"
+    mem_reservation: "768m"
+    depends_on:
+      - namenode
+      - postgres
+    environment:
+      HIVE_CORE_CONF_javax_jdo_option_ConnectionURL: jdbc:postgresql://postgres:5432/appdb
+      HIVE_CORE_CONF_javax_jdo_option_ConnectionDriverName: org.postgresql.Driver
+      HIVE_CORE_CONF_javax_jdo_option_ConnectionUserName: app
+      HIVE_CORE_CONF_javax_jdo_option_ConnectionPassword: app
+      SERVICE_PRECONDITION: namenode:9870 postgres:5432
+    ports:
+      - "10000:10000"
+      - "10002:10002"
+    networks: [bigdata-net]
+
+  # Nodo maestro de HBase para tablas NoSQL sobre ecosistema Hadoop.
+  hbase-master:
+    image: dajobe/hbase
+    container_name: hbase-master
+    profiles: ["legacy"]
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: "1536m"
+    mem_reservation: "768m"
+    ports:
+      - "16010:16010"
+      - "9090:9090"
+    networks: [bigdata-net]
+
+  # Cliente de Sqoop para transferencias entre RDBMS y HDFS/Hive.
+  sqoop-client:
+    image: bde2020/hadoop-base:2.0.0-hadoop3.2.1-java8
+    container_name: sqoop-client
+    profiles: ["legacy"]
+    restart: unless-stopped
+    cpus: "0.5"
+    mem_limit: "768m"
+    mem_reservation: "384m"
+    command: ["/bin/bash", "-lc", "sleep infinity"]
+    depends_on:
+      - namenode
+      - mysql
+    networks: [bigdata-net]
+
+  # Cliente de Apache Pig para scripts ETL sobre Hadoop.
+  pig-client:
+    image: bde2020/hadoop-base:2.0.0-hadoop3.2.1-java8
+    container_name: pig-client
+    profiles: ["legacy"]
+    restart: unless-stopped
+    cpus: "0.5"
+    mem_limit: "512m"
+    mem_reservation: "256m"
+    command: ["/bin/bash", "-lc", "sleep infinity"]
+    depends_on:
+      - namenode
+    networks: [bigdata-net]
+
+  # Orquestador de workflows del ecosistema Hadoop.
+  # TODO: imagen sequenceiq/oozie eliminada de Docker Hub. Buscar alternativa.
+  # oozie:
+  #   image: sequenceiq/oozie:5.2.1
+  #   container_name: oozie
+  #   profiles: ["legacy"]
+  #   restart: unless-stopped
+  #   cpus: "1.0"
+  #   mem_limit: "1g"
+  #   mem_reservation: "512m"
+  #   ports:
+  #     - "11000:11000"
+  #   networks: [bigdata-net]
+
+  # Monitorización clásica de nodos del clúster Hadoop.
+  # TODO: imagen pires/ganglia eliminada de Docker Hub. Usar Prometheus+Grafana como alternativa.
+  # ganglia:
+  #   image: pires/ganglia
+  #   container_name: ganglia
+  #   profiles: ["legacy"]
+  #   restart: unless-stopped
+  #   cpus: "0.5"
+  #   mem_limit: "256m"
+  #   mem_reservation: "128m"
+  #   ports:
+  #     - "8085:80"
+  #   networks: [bigdata-net]
+  # =========================
+  # Monitoring
+  # =========================
+  # Recolector y consulta de métricas de infraestructura y servicios.
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: prometheus
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    cpus: "0.75"
+    mem_limit: "768m"
+    mem_reservation: "384m"
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./data/prometheus:/prometheus
+    networks: [bigdata-net]
+
+  # Dashboards de observabilidad conectados a Prometheus.
+  grafana:
+    image: grafana/grafana:11.1.4
+    container_name: grafana
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    cpus: "0.5"
+    mem_limit: "512m"
+    mem_reservation: "256m"
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+    networks: [bigdata-net]
+
+networks:
+  bigdata-net:
+    driver: bridge
+
