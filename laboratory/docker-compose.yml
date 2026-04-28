@@ -16,7 +16,7 @@ name: bigdata-laboratory
 # SQL/Brokers (conexion):
 # MySQL: localhost:3306
 # PostgreSQL: localhost:5432
-# MongoDB: localhost:27017
+# MongoDB: localhost:27017 (sin autenticación por defecto)
 # Cassandra: localhost:9042
 # Redis: localhost:6379
 # Kafka: localhost:9092
@@ -99,6 +99,7 @@ services:
     cpus: "1.0"
     mem_limit: "1g"
     mem_reservation: "512m"
+    # Sin autenticación: la imagen oficial de MongoDB no requiere usuario/contraseña por defecto.
     ports:
       - "27017:27017"
     volumes:
