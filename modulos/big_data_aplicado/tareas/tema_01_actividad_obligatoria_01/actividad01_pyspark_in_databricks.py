@@ -11,7 +11,35 @@
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, mean, stddev, from_unixtime
+from pyspark import StorageLevel
 import time
+
+
+def try_cache_dataframe(df_to_cache, use_disk=True, label="DataFrame"):
+    """Intenta cachear/persistir; en Serverless (Comunity me sale error que no está soportado) puede no estar soportado."""
+    try:
+        if use_disk:
+            cached_df = df_to_cache.persist(StorageLevel.MEMORY_AND_DISK)
+        else:
+            cached_df = df_to_cache.cache()
+        return cached_df, True
+    except Exception as err:
+        err_msg = str(err)
+        if "NOT_SUPPORTED_WITH_SERVERLESS" in err_msg:
+            print(f"[WARN] {label}: cache/persist no soportado en serverless. Continuo sin cache.")
+            return df_to_cache, False
+        raise
+
+
+def try_unpersist_dataframe(df_to_unpersist, was_cached):
+    """Libera cache solo si realmente se pudo cachear."""
+    if not was_cached:
+        return
+    try:
+        df_to_unpersist.unpersist()
+    except Exception:
+        # No bloqueamos el script por un fallo al liberar cache.
+        pass
 
 # En Databricks, spark ya está disponible por eso dice el profe qeu es tan rapido
 # spark = SparkSession.builder.appName("Actividad01").getOrCreate()
@@ -24,7 +52,9 @@ data_path = "/Volumes/workspace/default/actividad01"
 start = time.time()
 df_movies = spark.read.csv(f"{data_path}/movies.csv", header=True, inferSchema=True)
 df_ratings = spark.read.csv(f"{data_path}/ratings.csv", header=True, inferSchema=True)
+# En Community Edition suele haber memoria limitada: mejor MEMORY_AND_DISK
 df = df_ratings.join(df_movies, on="movieId")
+df, df_cached = try_cache_dataframe(df, use_disk=True, label="df base")
 df.count()  # Forzar materialización
 t1_spark = time.time() - start
 print(f"PySpark - Cargar dataset: {t1_spark:.4f} sec")
@@ -61,10 +91,20 @@ df_avg.show(10)
 ################# Tarea-5. Convertir rating timestamp a fecha. #################
 start = time.time()
 df_with_date = df.withColumn("date", from_unixtime(col("timestamp")))
-df_with_date.select("userId", "movieId", "rating", "timestamp", "date").count()
+df_with_date_selected = df_with_date.select("userId", "movieId", "rating", "timestamp", "date")
+df_with_date_selected, date_cached = try_cache_dataframe(
+    df_with_date_selected,
+    use_disk=False,
+    label="df_with_date_selected"
+)
+df_with_date_selected.count()
 t5_spark = time.time() - start
 print(f"PySpark - Convertir timestamp a fecha: {t5_spark:.4f} sec")
-df_with_date.select("userId", "movieId", "rating", "timestamp", "date").show(5)
+df_with_date_selected.show(5)
+
+# Liberar memoria cacheada al terminar
+try_unpersist_dataframe(df_with_date_selected, date_cached)
+try_unpersist_dataframe(df, df_cached)
 
 ################# Tarea-6. Resumen de tiempos de ejecución #################
 print("\n" + "="*60)

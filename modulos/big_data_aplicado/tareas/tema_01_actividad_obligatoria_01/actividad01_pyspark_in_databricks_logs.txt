@@ -1,0 +1,51 @@
+PySpark - Cargar dataset: 10.4363 sec
+PySpark - Filtrar películas Action con rating >= 4: 4.5274 sec
+Resultados: 2583646 filas
+PySpark - Media y desviación estándar por usuario: 4.0695 sec
++------+------------------+------------------+
+|userId|              mean|               std|
++------+------------------+------------------+
+|   603|3.5899280575539567|0.9388008821022991|
+|   705| 3.453333333333333|0.8744625118806895|
+|   968| 3.130952380952381|1.2943785958954726|
+|  1893| 4.457142857142857|0.8859311201102668|
+|  2911| 3.380952380952381|1.0712698295103096|
++------+------------------+------------------+
+only showing top 5 rows
+PySpark - Ordenar películas por rating promedio: 3.8456 sec
++--------------------+----------+
+|               title|avg_rating|
++--------------------+----------+
+|    Marihuana (1936)|       5.0|
+|Afstiros katallil...|       5.0|
+|Tales That Witnes...|       5.0|
+|This Thing With S...|       5.0|
+|Island at War (2004)|       5.0|
+|The Garden of Sin...|       5.0|
+|  Yonkers Joe (2008)|       5.0|
+|    The Green (2011)|       5.0|
+|A Blank on the Ma...|       5.0|
+|Schmatta: Rags to...|       5.0|
++--------------------+----------+
+only showing top 10 rows
+PySpark - Convertir timestamp a fecha: 4.2114 sec
++------+-------+------+----------+-------------------+
+|userId|movieId|rating| timestamp|               date|
++------+-------+------+----------+-------------------+
+|     1|      2|   3.5|1112486027|2005-04-02 23:53:47|
+|     1|     29|   3.5|1112484676|2005-04-02 23:31:16|
+|     1|     32|   3.5|1112484819|2005-04-02 23:33:39|
+|     1|     47|   3.5|1112484727|2005-04-02 23:32:07|
+|     1|     50|   3.5|1112484580|2005-04-02 23:29:40|
++------+-------+------+----------+-------------------+
+only showing top 5 rows
+
+============================================================
+RESUMEN DE TIEMPOS - PySpark
+============================================================
+Tarea 1 - Cargar dataset:              10.4363 sec
+Tarea 2 - Filtrar Action rating>=4:    4.5274 sec
+Tarea 3 - Media y std por usuario:     4.0695 sec
+Tarea 4 - Ordenar por rating promedio: 3.8456 sec
+Tarea 5 - Timestamp a fecha:           4.2114 sec
+============================================================
