@@ -7,6 +7,8 @@
 # 5. Convertir rating timestamp a fecha.
 # 6. Medir tiempos de ejecución.
 
+# Este fichero es el que subo a mi workspace en DATABRICKS
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, mean, stddev, from_unixtime
 import time

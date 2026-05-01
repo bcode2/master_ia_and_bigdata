@@ -12,7 +12,7 @@ import pandas as pandas
 import polars as polars
 import time
 
-data_path = '/home/shared/master_linkiafp/modulos/big_data_aplicado/tareas/tema_01_M05_ACT_OBL_01/ml-20m'
+data_path = '/modulos/big_data_aplicado/tareas/tema_01_M05_ACT_OBL_01/ml-20m'
 
 ################# Tarea-1. Cargar el dataset movielens superdataset.csv. #################
 

@@ -1,4 +1,4 @@
-// 3.4 Consultas
+// 3.4 Consultas y sus explicaciones
 
 // Consulta 1: Clientes con compras > 100 EUR
 /*

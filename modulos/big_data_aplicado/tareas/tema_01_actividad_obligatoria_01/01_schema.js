@@ -1,3 +1,5 @@
+// Creación de la colección en la bbdd de mongodb
+
 db.createCollection("clientes", {
     validator: {
         $jsonSchema: {

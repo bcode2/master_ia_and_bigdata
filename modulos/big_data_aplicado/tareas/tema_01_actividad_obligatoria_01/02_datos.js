@@ -1,3 +1,5 @@
+// Insertar los datos de los clientes en la base de datos
+
 db.clientes.insertMany([
     {
         cliente_id: 1,
